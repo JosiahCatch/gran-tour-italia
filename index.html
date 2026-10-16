@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gran Tour d'Italia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,500;0,6..96,800;1,6..96,500&family=Archivo:wght@400;600;800&display=swap">
+<style>
+/* Tavolo verde da gioco: le casse ai lati come pile di fiches, al centro la "carta" della domanda. */
+:root {
+  --felt: #0f3b2d;
+  --felt-deep: #0a2a20;
+  --line: rgba(240, 230, 205, .14);
+  --paper: #fbf7ee;
+  --ink: #1f1b16;
+  --ink-soft: #5b5348;
+  --gold: #e0b75e;
+  --red: #d64a33;
+  --blue: #3f7fe0;
+  --ok: #49c486;
+  --ko: #ef6a52;
+  --text: #f3ecdc;
+  --text-soft: #bfc9bf;
+  --display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --ui: "Archivo", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(ellipse at 50% 30%, var(--felt) 0%, var(--felt-deep) 85%) fixed, var(--felt-deep);
+  color: var(--text);
+  font: 400 clamp(15px, 1.15vw, 19px)/1.45 var(--ui);
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.app {
+  min-height: 100%;
+  display: flex; flex-direction: column; gap: 14px;
+  padding-block: 14px 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ── barra in alto ── */
+.top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { font-family: var(--display); font-weight: 800; font-size: 1.6em; letter-spacing: .01em; margin: 0; line-height: 1; }
+.brand i { font-weight: 500; color: var(--gold); }
+.progress { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px; }
+.progress-label { font-size: .78em; letter-spacing: .12em; text-transform: uppercase; color: var(--text-soft); }
+.pips { display: flex; gap: 3px; }
+.pip { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+.pip.done { background: var(--text-soft); }
+.pip.now { background: var(--gold); }
+.pip.gap { margin-left: 8px; }
+.tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.ghost {
+  background: transparent; border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 14px; font-size: .85em; color: var(--text-soft);
+}
+.ghost:hover { color: var(--text); border-color: var(--text-soft); }
+
+/* ── tavolo ── */
+.board {
+  flex: 1;
+  display: grid; gap: 18px;
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 2.6fr) minmax(200px, 1fr);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .board { grid-template-columns: 1fr 1fr; }
+  .stage { grid-column: 1 / -1; order: 3; }
+}
+
+.team {
+  --tc: var(--red);
+  border: 1px solid var(--line); border-top: 6px solid var(--tc);
+  border-radius: 14px; padding: 16px;
+  background: rgba(0, 0, 0, .18);
+  display: flex; flex-direction: column; gap: 12px;
+  transition: box-shadow .3s;
+}
+.team.b { --tc: var(--blue); }
+.team.turn { box-shadow: 0 0 0 2px var(--tc), 0 0 40px -8px var(--tc); }
+.team-name { font-family: var(--display); font-weight: 800; font-size: 1.45em; line-height: 1.1; margin: 0; overflow-wrap: anywhere; }
+.turn-tag {
+  align-self: flex-start; font-size: .7em; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  background: var(--tc); color: #fff; padding: 3px 9px; border-radius: 4px;
+}
+.cash { font-family: var(--display); font-weight: 800; font-size: clamp(2em, 3.6vw, 3.4em); line-height: 1; font-variant-numeric: tabular-nums lining-nums; }
+.cash.neg { color: var(--ko); }
+.cash.up { animation: up .9s ease; }
+.cash.down { animation: down .9s ease; }
+@keyframes up { 0% { color: var(--ok); transform: scale(1.12); } 100% { transform: none; } }
+@keyframes down { 0% { color: var(--ko); transform: scale(.92); } 100% { transform: none; } }
+.debt { font-size: .85em; color: var(--ko); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-size: .78em; padding: 4px 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: rgba(255, 255, 255, .06);
+}
+.chip.used { opacity: .35; text-decoration: line-through; }
+.chip.triple { border-color: var(--gold); color: var(--gold); }
+.team-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.mini { background: rgba(255, 255, 255, .07); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-size: .8em; }
+.mini:hover { background: rgba(255, 255, 255, .14); }
+.loan { background: var(--gold); color: var(--ink); border: 0; border-radius: 8px; padding: 8px 12px; font-weight: 800; font-size: .85em; }
+
+/* ── la carta al centro ── */
+.stage {
+  background: var(--paper); color: var(--ink);
+  border-radius: 18px; padding: clamp(18px, 2.4vw, 36px);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .55);
+  display: flex; flex-direction: column; gap: 18px;
+  min-width: 0;
+}
+.eyebrow { font-size: .78em; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.region { font-family: var(--display); font-weight: 800; font-size: clamp(2.2em, 4.6vw, 4.4em); line-height: 1; margin: 0; text-wrap: balance; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { font-size: .85em; font-weight: 600; padding: 5px 12px; border-radius: 999px; background: #ece4d2; color: var(--ink); }
+.tag.hard { background: var(--ink); color: var(--gold); }
+.qtext { font-family: var(--display); font-weight: 500; font-size: clamp(1.6em, 2.9vw, 2.7em); line-height: 1.15; margin: 0; text-wrap: balance; }
+.note { color: var(--ink-soft); margin: 0; max-width: 65ch; }
+.err { color: #b3341f; font-weight: 600; margin: 0; }
+
+.bets { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.bet { border: 1px solid #e2d8c3; border-left: 6px solid var(--tc); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; --tc: var(--red); }
+.bet.b { --tc: var(--blue); }
+.bet label { font-weight: 800; }
+.bet-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.bet-row input {
+  width: 7.5em; padding: 8px 10px; border: 2px solid #d6cbb3; border-radius: 8px; background: #fff; color: var(--ink);
+  font-weight: 800; font-size: 1.2em; font-variant-numeric: tabular-nums;
+}
+.step { border: 1px solid #d6cbb3; background: #fff; color: var(--ink); border-radius: 8px; padding: 8px 10px; font-weight: 600; }
+.step:hover { background: #f1eadb; }
+.pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick button {
+  border: 1px solid #d6cbb3; background: #fff; color: var(--ink); border-radius: 999px; padding: 6px 12px; font-size: .85em; text-align: left;
+}
+.pick button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.pick button:disabled { opacity: .35; cursor: not-allowed; text-decoration: line-through; }
+.sfida-name { padding: 7px 10px; border: 2px solid #d6cbb3; border-radius: 8px; background: #fff; color: var(--ink); min-width: 0; width: 100%; max-width: 280px; }
+
+.primary {
+  align-self: flex-start; border: 0; border-radius: 12px; padding: 14px 26px;
+  background: var(--ink); color: var(--paper); font-weight: 800; font-size: 1.1em; letter-spacing: .02em;
+}
+.primary:hover { background: #3a3329; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.options { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.opt {
+  display: flex; gap: 14px; align-items: center; text-align: left;
+  border: 2px solid #e2d8c3; background: #fff; color: var(--ink); border-radius: 14px; padding: 14px 18px;
+  font-size: 1.15em; font-weight: 600;
+}
+.opt:hover:not(:disabled) { border-color: var(--ink); }
+.opt b { font-family: var(--display); font-size: 1.3em; width: 1.3em; flex: none; }
+.opt.right { border-color: var(--ok); background: #e3f6ea; }
+.opt.wrong { border-color: var(--ko); background: #fbe5e0; }
+.opt:disabled { cursor: default; }
+.opt.dim { opacity: .4; }
+
+.clues { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; counter-reset: c; }
+.clues li { counter-increment: c; display: flex; gap: 12px; font-size: 1.2em; }
+.clues li::before { content: counter(c); font-family: var(--display); font-weight: 800; font-size: 1.3em; line-height: 1; color: var(--ink-soft); }
+.order-items { display: flex; flex-wrap: wrap; gap: 10px; }
+.order-items span { background: #fff; border: 2px dashed #cdbf9f; border-radius: 10px; padding: 10px 18px; font-size: 1.25em; font-weight: 600; }
+
+.judge { display: flex; flex-wrap: wrap; gap: 10px; }
+.judge button { border: 0; border-radius: 12px; padding: 14px 26px; font-weight: 800; font-size: 1.1em; color: #fff; }
+.judge .yes { background: #2f9d66; }
+.judge .no { background: #c8432d; }
+
+.timer { display: flex; align-items: center; gap: 12px; }
+.timer-bar { flex: 1; height: 10px; border-radius: 5px; background: #ece4d2; overflow: hidden; }
+.timer-fill { height: 100%; background: var(--ink); width: 100%; transition: width .25s linear; }
+.timer-fill.late { background: var(--ko); }
+.timer-num { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 2.2em; text-align: right; font-size: 1.3em; }
+
+.both-answers { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.letters { display: flex; gap: 6px; flex-wrap: wrap; }
+.letters button { width: 3em; height: 3em; border-radius: 10px; border: 2px solid #d6cbb3; background: #fff; color: var(--ink); font-family: var(--display); font-weight: 800; font-size: 1.1em; }
+.letters button[aria-pressed="true"] { background: var(--tc); border-color: var(--tc); color: #fff; }
+
+.verdict { font-family: var(--display); font-weight: 800; font-size: clamp(2.4em, 5vw, 4.6em); line-height: 1; margin: 0; }
+.verdict.ok { color: #2f9d66; }
+.verdict.ko { color: #c8432d; }
+.lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 1.15em; font-weight: 600; }
+.answer { border-top: 1px solid #e2d8c3; padding-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.answer-label { font-size: .75em; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); }
+.answer-text { font-family: var(--display); font-weight: 800; font-size: 1.8em; line-height: 1.1; }
+.curio { font-style: italic; font-family: var(--display); font-size: 1.2em; color: var(--ink-soft); margin: 0; max-width: 60ch; }
+.ruba-box { border: 2px solid var(--gold); background: #fdf3da; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.event-card { display: flex; flex-direction: column; gap: 10px; animation: flip .6s ease; }
+@keyframes flip { from { transform: rotateX(70deg); opacity: .2; } to { transform: none; opacity: 1; } }
+.stamp { align-self: flex-start; border: 3px solid #b3341f; color: #b3341f; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; padding: 4px 12px; border-radius: 6px; transform: rotate(-3deg); }
+
+.final { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 1.1em; }
+.final th, .final td { padding: 10px 8px; border-bottom: 1px solid #e2d8c3; text-align: right; }
+.final th:first-child, .final td:first-child { text-align: left; }
+.final tfoot td { font-weight: 800; font-size: 1.2em; border-bottom: 0; }
+
+.setup-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-weight: 800; }
+.field input { padding: 10px 12px; border: 2px solid #d6cbb3; border-radius: 10px; background: #fff; color: var(--ink); font-size: 1.1em; min-width: 0; }
+
+/* regole */
+.overlay { position: fixed; inset: 0; background: rgba(5, 20, 15, .75); display: flex; align-items: flex-start; justify-content: center; padding: max(24px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; z-index: 20; }
+.rules { background: var(--paper); color: var(--ink); border-radius: 18px; padding: 28px; max-width: 760px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.rules h2 { font-family: var(--display); font-size: 2em; margin: 0; }
+.rules h3 { margin: 8px 0 0; font-size: 1em; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); }
+.rules ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.rules p { margin: 0; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="brand">Gran Tour <i>d'Italia</i></h1>
+    <div class="progress" id="progress"></div>
+    <div class="tools">
+      <button class="ghost" id="btn-rules" type="button">Regole</button>
+      <button class="ghost" id="btn-undo" type="button">Annulla ultima azione</button>
+      <button class="ghost" id="btn-new" type="button">Nuova partita</button>
+    </div>
+  </header>
+  <main class="board" id="board"></main>
+</div>
+
+<div class="overlay" id="rules" hidden>
+  <div class="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+    <h2 id="rules-title">Le regole</h2>
+    <p>Due squadre partono con la stessa cassa. Vince chi alla fine ha più soldi, tolti i debiti con la banca.</p>
+    <h3>Ogni domanda</h3>
+    <ul>
+      <li>Si vedono la regione e la categoria, ma non la domanda.</li>
+      <li>La squadra di turno punta: minimo 50 €, massimo tutta la cassa.</li>
+      <li>Poi esce la domanda: 30 secondi per decidere. Giusta: si vince la puntata. Sbagliata: si perde.</li>
+      <li>Domande con la stella <b>★ Difficile</b>: se indovinate, la vincita vale il doppio.</li>
+      <li>Domande «Chi si avvicina di più»: rispondono e puntano tutte e due le squadre. Vince chi dà il numero più vicino. Chi indovina il numero esatto prende anche 100 € di premio.</li>
+    </ul>
+    <h3>Le carte speciali (una volta a testa per partita)</h3>
+    <ul>
+      <li><b>Furto</b>: se indovinate, la vincita la paga l'altra squadra invece della banca.</li>
+      <li><b>Scudo</b>: se sbagliate, non perdete niente.</li>
+      <li><b>Raddoppio</b>: vincita e perdita raddoppiano.</li>
+      <li><b>Rubabandiera</b>: se gli avversari sbagliano, rispondete voi e vi prendete metà di quello che hanno perso.</li>
+      <li><b>Sfida diretta</b>: sulla domanda degli avversari, scegliete voi chi deve rispondere, da solo e senza aiuti. Se sbaglia, voi prendete 100 €.</li>
+    </ul>
+    <p>Furto, Scudo e Raddoppio si dichiarano insieme alla puntata, prima di vedere la domanda: una carta per domanda.</p>
+    <h3>Imprevisti e banca</h3>
+    <ul>
+      <li>Quattro volte durante la partita esce un imprevisto: soldi in più, soldi in meno, scambi di cassa o un'asta.</li>
+      <li>Se la cassa scende sotto i 50 €, potete chiedere alla banca un prestito di 500 €. Alla fine ne restituite 750.</li>
+    </ul>
+    <h3>La finale</h3>
+    <ul>
+      <li>Ogni squadra scrive su un foglio quanto punta e quale risposta sceglie. Poi si rivela tutto insieme.</li>
+    </ul>
+    <button class="primary" id="btn-close-rules" type="button">Chiudi</button>
+  </div>
+</div>
+
+<script src="domande.js"></script>
+<script>
+(() => {
+  const Q = window.DOMANDE, EV = window.IMPREVISTI, TAPPE = window.TAPPE;
+  const KEY = "granTourItalia.v1";
+  const EVENT_AFTER = [4, 11, 19, 24];   // imprevisto dopo la 5ª, 12ª, 20ª e 25ª domanda
+  const TIMER_SECONDS = 30;
+  const LOAN = 500, LOAN_BACK = 750, MIN_BET = 50;
+  const CARDS = {
+    furto: "Furto", scudo: "Scudo", raddoppio: "Raddoppio", ruba: "Rubabandiera", sfida: "Sfida diretta"
+  };
+  const LETTERS = ["A", "B", "C", "D"];
+
+  // A chi tocca: le domande "singola" si alternano tra le due squadre.
+  const TURNO = [];
+  { let t = 0; Q.forEach((q, i) => { if (q.modo === "singola") { TURNO[i] = t; t = 1 - t; } else TURNO[i] = null; }); }
+
+  let S = null, history = [], flash = "", lastCash = null, showRules = false;
+
+  // ── utilità ──
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const eur = n => (n < 0 ? "−" : "") + Math.abs(Math.round(n)).toLocaleString("it-IT") + " €";
+  const round10 = n => Math.round(n / 10) * 10;
+  const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const teamCls = i => i === 0 ? "a" : "b";
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ S, history: history.slice(-40) })); } catch (e) {} }
+  function load() {
+    try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.S) { S = d.S; history = d.history || []; } } catch (e) {}
+  }
+  function commit(fn) {
+    history.push(JSON.stringify(S));
+    if (history.length > 60) history.shift();
+    flash = "";
+    fn();
+    save(); render();
+  }
+  function undo() {
+    if (!history.length) return;
+    S = JSON.parse(history.pop());
+    stopTimer(); flash = ""; save(); render();
+  }
+
+  const mkTeam = (name, cash) => ({ name, cash, debt: 0, triple: false, cards: { furto: 1, scudo: 1, raddoppio: 1, ruba: 1, sfida: 1 } });
+  const freshCur = () => ({ bets: [100, 100], card: [null, null], sfida: false, sfidaName: "", ans: [null, null], nums: ["", ""], clues: 1, result: null, ruba: null, reveal: false });
+
+  function newGame(n0, n1, cap) {
+    S = {
+      phase: "intro", qi: 0, cap,
+      teams: [mkTeam(n0, cap), mkTeam(n1, cap)],
+      cur: freshCur(),
+      events: shuffle(EV.map((_, i) => i)).slice(0, EVENT_AFTER.length),
+      evIdx: 0, ev: null
+    };
+    history = []; lastCash = null; save(); render();
+  }
+
+  const participants = () => S.cur && Q[S.qi].modo === "singola" ? [TURNO[S.qi]] : [0, 1];
+
+  // ── soldi ──
+  function applyOutcome(i, correct, lines, delta) {
+    const q = Q[S.qi], T = S.teams, o = 1 - i, c = S.cur;
+    const bet = c.bets[i], card = c.card[i], mult = card === "raddoppio" ? 2 : 1;
+    let loss = 0;
+    if (correct) {
+      const triple = T[i].triple ? 3 : 1;
+      const win = bet * mult * (q.difficile ? 2 : 1) * triple;
+      T[i].cash += win; delta[i] += win;
+      const extra = [q.difficile && "difficile ×2", card === "raddoppio" && "raddoppio ×2", triple > 1 && "asta ×3"].filter(Boolean).join(", ");
+      if (card === "furto") {
+        T[o].cash -= win; delta[o] -= win;
+        lines.push(`${esc(T[i].name)} indovina e ruba ${eur(win)} a ${esc(T[o].name)}${extra ? ` (${extra})` : ""}`);
+      } else lines.push(`${esc(T[i].name)} indovina: +${eur(win)}${extra ? ` (${extra})` : ""}`);
+    } else {
+      loss = card === "scudo" ? 0 : bet * mult;
+      T[i].cash -= loss; delta[i] -= loss;
+      lines.push(card === "scudo"
+        ? `${esc(T[i].name)} sbaglia, ma lo Scudo para il colpo: non perde niente`
+        : `${esc(T[i].name)} sbaglia: −${eur(loss).replace("−", "")}${card === "raddoppio" ? " (raddoppio)" : ""}`);
+    }
+    if (card) T[i].cards[card] = 0;
+    T[i].triple = false;
+    return loss;
+  }
+
+  function resolveSingle(correct) {
+    commit(() => {
+      const q = Q[S.qi], i = TURNO[S.qi], o = 1 - i, c = S.cur, T = S.teams;
+      const lines = [], delta = [0, 0];
+      const loss = applyOutcome(i, correct, lines, delta);
+      if (c.sfida) {
+        T[o].cards.sfida = 0;
+        if (!correct) { T[o].cash += 100; delta[o] += 100; lines.push(`${esc(T[o].name)} vince la Sfida diretta: +100 €`); }
+      }
+      const canRuba = !correct && loss > 0 && T[o].cards.ruba && q.tipo !== "vf";
+      c.result = { correct, lines, delta, loss, canRuba };
+      c.reveal = !canRuba;
+      S.phase = "result";
+    });
+  }
+
+  function resolveRuba(correct) {
+    commit(() => {
+      const i = TURNO[S.qi], o = 1 - i, c = S.cur, T = S.teams, r = c.result;
+      T[o].cards.ruba = 0;
+      const half = round10(r.loss / 2);
+      if (correct) { T[o].cash += half; r.delta[o] += half; r.lines.push(`${esc(T[o].name)} usa Rubabandiera e indovina: +${eur(half)}`); }
+      else r.lines.push(`${esc(T[o].name)} usa Rubabandiera ma sbaglia anche lei: niente premio`);
+      c.ruba = "done"; c.reveal = true;
+    });
+  }
+
+  function resolveBoth() {
+    const q = Q[S.qi], c = S.cur;
+    let correct;
+    const lines = [], delta = [0, 0];
+    if (q.tipo === "numero") {
+      const n = c.nums.map(v => parseFloat(String(v).replace(",", ".")));
+      if (n.some(v => !isFinite(v))) { flash = "Scrivete il numero di tutte e due le squadre."; render(); return; }
+      const d = n.map(v => Math.abs(v - q.valore));
+      correct = d[0] === d[1] ? [true, true] : [d[0] < d[1], d[1] < d[0]];
+      commit(() => {
+        lines.push(`Risposte: ${esc(S.teams[0].name)} ${n[0].toLocaleString("it-IT")} · ${esc(S.teams[1].name)} ${n[1].toLocaleString("it-IT")}`);
+        [0, 1].forEach(i => applyOutcome(i, correct[i], lines, delta));
+        [0, 1].forEach(i => { if (d[i] === 0) { S.teams[i].cash += 100; delta[i] += 100; lines.push(`${esc(S.teams[i].name)} centra il numero esatto: premio di 100 €`); } });
+        S.cur.result = { correct: correct[0] || correct[1], both: correct, lines, delta };
+        S.cur.reveal = true; S.phase = "result";
+      });
+    } else {
+      if (c.ans.some(a => a === null)) { flash = "Segnate la risposta di tutte e due le squadre."; render(); return; }
+      correct = c.ans.map(a => a === q.corretta);
+      commit(() => {
+        [0, 1].forEach(i => applyOutcome(i, correct[i], lines, delta));
+        S.cur.result = { correct: correct[0] || correct[1], both: correct, lines, delta };
+        S.cur.reveal = true; S.phase = "result";
+      });
+    }
+  }
+
+  function showQuestion() {
+    const errs = [];
+    participants().forEach(i => {
+      const t = S.teams[i], b = S.cur.bets[i];
+      if (t.cash < MIN_BET) errs.push(`${t.name} ha meno di ${MIN_BET} €: chiedete un prestito alla banca.`);
+      else if (!Number.isInteger(b) || b < MIN_BET) errs.push(`La puntata di ${t.name} deve essere almeno ${MIN_BET} €.`);
+      else if (b > t.cash) errs.push(`${t.name} non può puntare più di ${eur(t.cash)}.`);
+    });
+    if (S.cur.sfida && !S.cur.sfidaName.trim()) errs.push("Scrivete il nome di chi deve rispondere alla Sfida diretta.");
+    if (errs.length) { flash = errs.join(" "); render(); return; }
+    commit(() => { S.phase = "question"; });
+    startTimer();
+  }
+
+  function next() {
+    commit(() => {
+      if (EVENT_AFTER.includes(S.qi) && S.evIdx < S.events.length) {
+        S.ev = { id: S.events[S.evIdx++], target: Math.random() < .5 ? 0 : 1, bids: ["", ""], lines: null };
+        S.phase = "event";
+      } else advance();
+    });
+  }
+  function advance() {
+    if (S.qi >= Q.length - 1) { S.phase = "end"; return; }
+    S.qi++; S.cur = freshCur(); S.ev = null; S.phase = "intro";
+  }
+
+  function applyEvent() {
+    const e = EV[S.ev.id], T = S.teams, t = S.ev.target, o = 1 - t;
+    if (e.effetto === "asta") {
+      const b = S.ev.bids.map(v => v === "" ? 0 : parseInt(v, 10));
+      if (b.some((v, i) => !Number.isInteger(v) || v < 0 || v > Math.max(0, T[i].cash))) { flash = "Ogni offerta deve essere tra 0 € e la cassa della squadra."; render(); return; }
+      commit(() => {
+        const lines = [`Offerte: ${esc(T[0].name)} ${eur(b[0])} · ${esc(T[1].name)} ${eur(b[1])}`];
+        if (b[0] === b[1]) lines.push("Parità: nessuno vince l'asta, nessuno paga.");
+        else { const w = b[0] > b[1] ? 0 : 1; T[w].cash -= b[w]; T[w].triple = true; lines.push(`${esc(T[w].name)} vince l'asta e paga ${eur(b[w])}. Alla prossima domanda, se indovina, la vincita vale il triplo.`); }
+        S.ev.lines = lines;
+      });
+      return;
+    }
+    commit(() => {
+      const lines = [];
+      if (e.effetto === "soldi") { T[t].cash += e.importo; lines.push(`${esc(T[t].name)}: ${e.importo > 0 ? "+" : ""}${eur(e.importo)}`); }
+      if (e.effetto === "regalo") { T[t].cash -= e.importo; T[o].cash += e.importo; lines.push(`${esc(T[t].name)} dà ${eur(e.importo)} a ${esc(T[o].name)}`); }
+      if (e.effetto === "brigante") {
+        if (T[0].cash === T[1].cash) lines.push("Le squadre sono pari: il brigante se ne va a mani vuote.");
+        else { const r = T[0].cash > T[1].cash ? 0 : 1; T[r].cash -= e.importo; T[1 - r].cash += e.importo; lines.push(`Il brigante prende ${eur(e.importo)} a ${esc(T[r].name)} e li dà a ${esc(T[1 - r].name)}`); }
+      }
+      if (e.effetto === "scambio") { [T[0].cash, T[1].cash] = [T[1].cash, T[0].cash]; lines.push("Casse scambiate! I debiti con la banca restano dove sono."); }
+      S.ev.lines = lines;
+    });
+  }
+
+  // ── timer ──
+  let timerEnd = 0, timerLeft = TIMER_SECONDS, timerInt = null, audio = null;
+  function beep(f, d) {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(audio.destination);
+      g.gain.setValueAtTime(.18, audio.currentTime); g.gain.exponentialRampToValueAtTime(.001, audio.currentTime + d);
+      o.start(); o.stop(audio.currentTime + d);
+    } catch (e) {}
+  }
+  function startTimer() {
+    stopTimer(); timerLeft = TIMER_SECONDS; timerEnd = Date.now() + TIMER_SECONDS * 1000;
+    let lastSec = TIMER_SECONDS;
+    timerInt = setInterval(() => {
+      timerLeft = Math.max(0, (timerEnd - Date.now()) / 1000);
+      const s = Math.ceil(timerLeft);
+      if (s !== lastSec) { lastSec = s; if (s <= 5 && s > 0) beep(880, .08); if (s === 0) beep(330, .6); }
+      paintTimer();
+      if (timerLeft <= 0) stopTimer();
+    }, 200);
+    paintTimer();
+  }
+  function stopTimer() { clearInterval(timerInt); timerInt = null; }
+  function paintTimer() {
+    const f = document.getElementById("timer-fill"), n = document.getElementById("timer-num"), b = document.getElementById("timer-btn");
+    if (!f) return;
+    f.style.width = (timerLeft / TIMER_SECONDS * 100) + "%";
+    f.classList.toggle("late", timerLeft <= 5);
+    n.textContent = Math.ceil(timerLeft);
+    if (b) b.textContent = timerInt ? "Ricomincia" : "Avvia timer";
+  }
+
+  // ── disegno ──
+  function render() {
+    renderProgress();
+    document.getElementById("rules").hidden = !showRules;
+    const board = document.getElementById("board");
+    if (!S) { board.innerHTML = setupView(); return; }
+    board.innerHTML = teamView(0) + `<section class="stage" aria-live="polite">${stageView()}</section>` + teamView(1);
+    if (lastCash) S.teams.forEach((t, i) => {
+      if (t.cash !== lastCash[i]) { const el = document.getElementById("cash-" + i); if (el) el.classList.add(t.cash > lastCash[i] ? "up" : "down"); }
+    });
+    lastCash = S.teams.map(t => t.cash);
+    if (S.phase === "question") paintTimer();
+  }
+
+  function renderProgress() {
+    const p = document.getElementById("progress");
+    if (!S) { p.innerHTML = `<span class="progress-label">${Q.length} domande sulle regioni italiane</span>`; return; }
+    const pips = Q.map((q, i) => {
+      const gap = i > 0 && q.tappa !== Q[i - 1].tappa ? " gap" : "";
+      const st = i < S.qi || S.phase === "end" ? " done" : i === S.qi ? " now" : "";
+      return `<span class="pip${st}${gap}"></span>`;
+    }).join("");
+    const label = S.phase === "end" ? "Partita finita" : `${TAPPE[Q[S.qi].tappa]} · domanda ${S.qi + 1} di ${Q.length}`;
+    p.innerHTML = `<span class="progress-label">${label}</span><div class="pips">${pips}</div>`;
+  }
+
+  function teamView(i) {
+    const t = S.teams[i];
+    const turn = S.phase !== "end" && S.phase !== "event" && participants().includes(i) && Q[S.qi].modo === "singola";
+    const chips = Object.keys(CARDS).map(k => `<span class="chip${t.cards[k] ? "" : " used"}">${CARDS[k]}</span>`).join("")
+      + (t.triple ? `<span class="chip triple">Asta ×3</span>` : "");
+    return `<aside class="team ${teamCls(i)}${turn ? " turn" : ""}">
+      ${turn ? `<span class="turn-tag">Tocca a voi</span>` : ""}
+      <h2 class="team-name">${esc(t.name)}</h2>
+      <div class="cash${t.cash < 0 ? " neg" : ""}" id="cash-${i}">${eur(t.cash)}</div>
+      ${t.debt ? `<div class="debt">Debito con la banca: ${eur(t.debt)}</div>` : ""}
+      <div class="chips">${chips}</div>
+      ${S.phase !== "end" && t.cash < MIN_BET ? `<button class="loan" data-act="loan" data-t="${i}" type="button">Prestito: +${eur(LOAN)} (restituite ${eur(LOAN_BACK)})</button>` : ""}
+      <div class="team-actions">
+        <button class="mini" data-act="adj" data-t="${i}" data-d="-50" type="button" aria-label="Togli 50 € a ${esc(t.name)}">−50</button>
+        <button class="mini" data-act="adj" data-t="${i}" data-d="50" type="button" aria-label="Aggiungi 50 € a ${esc(t.name)}">+50</button>
+        <span style="font-size:.75em;color:var(--text-soft);align-self:center">correggi</span>
+      </div>
+    </aside>`;
+  }
+
+  function stageView() {
+    switch (S.phase) {
+      case "intro": return introView();
+      case "question": return questionView();
+      case "result": return resultView();
+      case "event": return eventView();
+      case "end": return endView();
+    }
+    return "";
+  }
+
+  function headView(q) {
+    const tipo = { multipla: "Risposta multipla", vf: "Vero o falso", numero: "Chi si avvicina di più", indizi: "Tre indizi", ordina: "Metti in ordine" }[q.tipo];
+    return `<div class="eyebrow"><span>${TAPPE[q.tappa]}</span><span>Domanda ${S.qi + 1} di ${Q.length}</span></div>
+      <h2 class="region">${esc(q.regione)}</h2>
+      <div class="meta"><span class="tag">${esc(q.categoria)}</span><span class="tag">${tipo}</span>${q.difficile ? `<span class="tag hard">★ Difficile: vincita ×2</span>` : ""}</div>`;
+  }
+
+  function betView(i, cards) {
+    const t = S.teams[i], c = S.cur;
+    const pick = cards.map(k => `<button type="button" data-act="card" data-t="${i}" data-c="${k}" aria-pressed="${c.card[i] === k}" ${t.cards[k] ? "" : "disabled"}>${CARDS[k]}</button>`).join("");
+    return `<div class="bet ${teamCls(i)}">
+      <label for="bet-${i}">Puntata di ${esc(t.name)}</label>
+      <div class="bet-row">
+        <button class="step" type="button" data-act="bet" data-t="${i}" data-d="-50">−50</button>
+        <input id="bet-${i}" type="number" inputmode="numeric" step="50" min="${MIN_BET}" value="${c.bets[i]}" data-in="bet" data-t="${i}">
+        <button class="step" type="button" data-act="bet" data-t="${i}" data-d="50">+50</button>
+        <button class="step" type="button" data-act="bet" data-t="${i}" data-d="100">+100</button>
+        <button class="step" type="button" data-act="allin" data-t="${i}">Tutto</button>
+      </div>
+      <div class="pick" role="group" aria-label="Carta speciale">${pick}</div>
+      ${t.triple ? `<p class="note">Avete il jolly dell'asta: se indovinate, vincita ×3.</p>` : ""}
+    </div>`;
+  }
+
+  function introView() {
+    const q = Q[S.qi], c = S.cur;
+    let body;
+    if (q.modo === "singola") {
+      const i = TURNO[S.qi], o = 1 - i, opp = S.teams[o];
+      body = `<p class="note">Tocca a <b>${esc(S.teams[i].name)}</b>. Puntate prima di vedere la domanda.</p>
+        <div class="bets">${betView(i, ["furto", "scudo", "raddoppio"])}
+          <div class="bet ${teamCls(o)}">
+            <label for="sfida-name">${esc(opp.name)}: Sfida diretta?</label>
+            <div class="pick"><button type="button" data-act="sfida" aria-pressed="${c.sfida}" ${opp.cards.sfida ? "" : "disabled"}>Sfida diretta</button></div>
+            ${c.sfida ? `<input class="sfida-name" id="sfida-name" data-in="sfida" placeholder="Chi deve rispondere da solo?" value="${esc(c.sfidaName)}">` : `<p class="note">Potete scegliere voi chi risponde per gli avversari, da solo. Se sbaglia, +100 € a voi.</p>`}
+          </div>
+        </div>`;
+    } else {
+      const fin = q.tappa === "finale";
+      body = `<p class="note">${fin ? "<b>Puntata segreta:</b> ogni squadra scrive su un foglio quanto punta, poi la rivelate e il conduttore la inserisce." : "Domanda per <b>tutte e due</b> le squadre: puntate entrambe."}</p>
+        <div class="bets">${betView(0, ["furto", "scudo", "raddoppio"])}${betView(1, ["furto", "scudo", "raddoppio"])}</div>`;
+    }
+    return `${headView(q)}${body}
+      ${flash ? `<p class="err">${esc(flash)}</p>` : ""}
+      <button class="primary" data-act="show" type="button">Mostra la domanda</button>`;
+  }
+
+  function timerView() {
+    return `<div class="timer"><div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div><span class="timer-num" id="timer-num">${TIMER_SECONDS}</span>
+      <button class="step" id="timer-btn" type="button" data-act="timer">Avvia timer</button></div>`;
+  }
+
+  function questionView() {
+    const q = Q[S.qi], c = S.cur;
+    let body = "";
+    const sfida = c.sfida ? `<p class="note"><b>Sfida diretta:</b> risponde da solo ${esc(c.sfidaName)}, senza suggerimenti.</p>` : "";
+    if (q.modo === "singola") {
+      if (q.tipo === "multipla" || q.tipo === "vf") {
+        body = `<div class="options">${q.opzioni.map((o, k) => `<button class="opt" type="button" data-act="ans" data-k="${k}">${q.tipo === "multipla" ? `<b>${LETTERS[k]}</b>` : ""}${esc(o)}</button>`).join("")}</div>
+          <p class="note">Cliccate la risposta scelta dalla squadra.</p>`;
+      } else if (q.tipo === "indizi") {
+        body = `<ol class="clues">${q.indizi.slice(0, c.clues).map(x => `<li>${esc(x)}</li>`).join("")}</ol>
+          ${c.clues < q.indizi.length ? `<button class="step" type="button" data-act="clue">Mostra il prossimo indizio</button>` : ""}
+          ${judgeView("judge")}`;
+      } else if (q.tipo === "ordina") {
+        body = `<div class="order-items">${q.mostra.map(x => `<span>${esc(x)}</span>`).join("")}</div>${judgeView("judge")}`;
+      }
+    } else if (q.tipo === "numero") {
+      body = `<div class="both-answers">${[0, 1].map(i => `<div class="bet ${teamCls(i)}"><label for="num-${i}">Risposta di ${esc(S.teams[i].name)}</label>
+          <input class="sfida-name" id="num-${i}" inputmode="decimal" data-in="num" data-t="${i}" value="${esc(c.nums[i])}" placeholder="Un numero"></div>`).join("")}</div>
+        ${flash ? `<p class="err">${esc(flash)}</p>` : ""}
+        <button class="primary" type="button" data-act="both">Confronta le risposte</button>`;
+    } else {
+      body = `<div class="options">${q.opzioni.map((o, k) => `<div class="opt" style="cursor:default"><b>${LETTERS[k]}</b>${esc(o)}</div>`).join("")}</div>
+        <div class="both-answers">${[0, 1].map(i => `<div class="bet ${teamCls(i)}"><span style="font-weight:800">Risposta di ${esc(S.teams[i].name)}</span>
+          <div class="letters">${q.opzioni.map((_, k) => `<button type="button" data-act="bothans" data-t="${i}" data-k="${k}" aria-pressed="${c.ans[i] === k}">${LETTERS[k]}</button>`).join("")}</div></div>`).join("")}</div>
+        ${flash ? `<p class="err">${esc(flash)}</p>` : ""}
+        <button class="primary" type="button" data-act="both">Rivela</button>`;
+    }
+    return `<div class="eyebrow"><span>${esc(q.regione)}</span><span>${esc(q.categoria)}</span>${q.difficile ? "<span>★ Difficile</span>" : ""}</div>
+      <h2 class="qtext">${esc(q.testo)}</h2>${sfida}${timerView()}${body}`;
+  }
+
+  function judgeView(act) {
+    return `<p class="note">Il conduttore controlla la risposta sul suo foglio (conduttore.html) e decide.</p>
+      <div class="judge"><button class="yes" type="button" data-act="${act}" data-v="1">Giusta</button><button class="no" type="button" data-act="${act}" data-v="0">Sbagliata</button></div>`;
+  }
+
+  function answerText(q) {
+    if (q.tipo === "multipla") return `${LETTERS[q.corretta]}. ${esc(q.opzioni[q.corretta])}`;
+    if (q.tipo === "vf") return esc(q.opzioni[q.corretta]);
+    return esc(q.risposta);
+  }
+
+  function resultView() {
+    const q = Q[S.qi], c = S.cur, r = c.result;
+    const i = TURNO[S.qi], o = i === null ? null : 1 - i;
+    let verdict;
+    if (r.both) verdict = r.both[0] && r.both[1] ? "Pari!" : r.both[0] || r.both[1] ? `Vince ${esc(S.teams[r.both[0] ? 0 : 1].name)}` : "Nessuno indovina";
+    else verdict = r.correct ? "Giusto!" : "Sbagliato!";
+    const ok = r.both ? (r.both[0] || r.both[1]) : r.correct;
+
+    let options = "";
+    if ((q.tipo === "multipla" || q.tipo === "vf") && q.modo === "singola") {
+      const rubaMode = c.ruba === "answering";
+      options = `<div class="options">${q.opzioni.map((op, k) => {
+        let cls = "opt";
+        if (k === c.ans[i] && k !== q.corretta) cls += " wrong";
+        if (k === q.corretta && (c.reveal || k === c.ans[i])) cls += " right";
+        if (rubaMode && k === c.ans[i]) cls += " dim";
+        const can = rubaMode && k !== c.ans[i];
+        return `<button class="${cls}" type="button" ${can ? `data-act="rubaans" data-k="${k}"` : "disabled"}>${q.tipo === "multipla" ? `<b>${LETTERS[k]}</b>` : ""}${esc(op)}</button>`;
+      }).join("")}</div>`;
+    }
+
+    let ruba = "";
+    if (r.canRuba && !c.ruba) {
+      ruba = `<div class="ruba-box"><b>${esc(S.teams[o].name)} vuole usare Rubabandiera?</b>
+        <span>Se rispondete giusto prendete ${eur(round10(r.loss / 2))}.</span>
+        <div class="row"><button class="primary" type="button" data-act="ruba">Usa Rubabandiera</button><button class="step" type="button" data-act="noruba">No, mostra la risposta</button></div></div>`;
+    } else if (c.ruba === "answering") {
+      ruba = `<div class="ruba-box"><b>Risponde ${esc(S.teams[o].name)}</b>
+        ${q.tipo === "multipla" ? `<span>Cliccate la risposta che danno.</span>` : judgeView("rubajudge")}</div>`;
+    }
+
+    return `<div class="eyebrow"><span>${esc(q.regione)}</span><span>${esc(q.categoria)}</span></div>
+      <h2 class="qtext" style="font-size:clamp(1.2em,2vw,1.7em)">${esc(q.testo)}</h2>
+      <p class="verdict ${ok ? "ok" : "ko"}">${verdict}</p>
+      <ul class="lines">${r.lines.map(l => `<li>${l}</li>`).join("")}</ul>
+      ${options}${ruba}
+      ${c.reveal ? `<div class="answer"><span class="answer-label">Risposta</span><span class="answer-text">${answerText(q)}</span><p class="curio">${esc(q.curiosita)}</p></div>
+        <button class="primary" type="button" data-act="next">${S.qi === Q.length - 1 ? "Vai alla classifica" : "Avanti"}</button>` : ""}`;
+  }
+
+  function eventView() {
+    const e = EV[S.ev.id], t = S.ev.target, T = S.teams;
+    const targeted = e.effetto === "soldi" || e.effetto === "regalo";
+    let body;
+    if (S.ev.lines) {
+      body = `<ul class="lines">${S.ev.lines.map(l => `<li>${l}</li>`).join("")}</ul><button class="primary" type="button" data-act="evnext">Avanti</button>`;
+    } else if (e.effetto === "asta") {
+      body = `<div class="both-answers">${[0, 1].map(i => `<div class="bet ${teamCls(i)}"><label for="bid-${i}">Offerta di ${esc(T[i].name)}</label>
+        <input class="sfida-name" id="bid-${i}" inputmode="numeric" data-in="bid" data-t="${i}" value="${esc(S.ev.bids[i])}" placeholder="0 €"></div>`).join("")}</div>
+        ${flash ? `<p class="err">${esc(flash)}</p>` : ""}
+        <button class="primary" type="button" data-act="event">Chiudi l'asta</button>`;
+    } else {
+      body = `${targeted ? `<p class="note" style="font-size:1.2em">Il destino ha scelto: <b>${esc(T[t].name)}</b></p>` : ""}
+        <button class="primary" type="button" data-act="event">Applica l'imprevisto</button>`;
+    }
+    return `<div class="event-card"><span class="stamp">Imprevisto</span>
+      <h2 class="region">${esc(e.titolo)}</h2><p class="qtext" style="font-size:clamp(1.3em,2.2vw,2em)">${esc(e.testo)}</p></div>${body}`;
+  }
+
+  function endView() {
+    const T = S.teams, tot = T.map(t => t.cash - t.debt);
+    const w = tot[0] === tot[1] ? null : tot[0] > tot[1] ? 0 : 1;
+    return `<div class="eyebrow"><span>Fine del Gran Tour</span></div>
+      <h2 class="region">${w === null ? "Pareggio!" : `Vince ${esc(T[w].name)}`}</h2>
+      <div style="overflow-x:auto"><table class="final">
+        <thead><tr><th></th><th>${esc(T[0].name)}</th><th>${esc(T[1].name)}</th></tr></thead>
+        <tbody><tr><td>Cassa</td><td>${eur(T[0].cash)}</td><td>${eur(T[1].cash)}</td></tr>
+        <tr><td>Da restituire alla banca</td><td>${T[0].debt ? eur(-T[0].debt) : "–"}</td><td>${T[1].debt ? eur(-T[1].debt) : "–"}</td></tr></tbody>
+        <tfoot><tr><td>Totale</td><td>${eur(tot[0])}</td><td>${eur(tot[1])}</td></tr></tfoot>
+      </table></div>
+      <button class="primary" type="button" data-act="restart">Nuova partita</button>`;
+  }
+
+  function setupView() {
+    let saved = false;
+    try { saved = !!localStorage.getItem(KEY); } catch (e) {}
+    return `<section class="stage" style="grid-column:1/-1;max-width:900px;justify-self:center;width:100%">
+      <div class="eyebrow"><span>${Q.length} domande</span><span>2 squadre</span><span>circa 1 ora</span></div>
+      <h2 class="region">Pronti a partire?</h2>
+      <p class="note">Un viaggio dalla Valle d'Aosta alla Sicilia. A ogni tappa si punta, si rischia e si prova a portare a casa la cassa più grande.</p>
+      <div class="setup-grid">
+        <div class="field"><label for="n0">Squadra rossa</label><input id="n0" value="I Garibaldini" maxlength="30"></div>
+        <div class="field"><label for="n1">Squadra blu</label><input id="n1" value="I Carbonari" maxlength="30"></div>
+        <div class="field"><label for="cap">Cassa iniziale (€)</label><input id="cap" type="number" step="100" min="100" value="1000"></div>
+      </div>
+      <div class="row"><button class="primary" type="button" data-act="start">Inizia la partita</button>
+        <button class="step" type="button" data-act="openrules">Leggi le regole</button></div>
+    </section>`;
+  }
+
+  // ── comandi ──
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.id === "btn-rules") { showRules = true; render(); return; }
+    if (b.id === "btn-close-rules") { showRules = false; render(); return; }
+    if (b.id === "btn-undo") { undo(); return; }
+    if (b.id === "btn-new") {
+      if (!S) return;
+      if (b.dataset.confirm) { stopTimer(); S = null; history = []; try { localStorage.removeItem(KEY); } catch (e) {} render(); return; }
+      b.dataset.confirm = "1"; b.textContent = "Sicuri? Clicca ancora";
+      setTimeout(() => { b.textContent = "Nuova partita"; delete b.dataset.confirm; }, 3000);
+      return;
+    }
+    const a = b.dataset.act, t = +b.dataset.t;
+    if (!a) return;
+    const c = S && S.cur;
+    switch (a) {
+      case "openrules": showRules = true; render(); break;
+      case "start": {
+        const n0 = document.getElementById("n0").value.trim() || "Squadra rossa";
+        const n1 = document.getElementById("n1").value.trim() || "Squadra blu";
+        const cap = Math.max(100, parseInt(document.getElementById("cap").value, 10) || 1000);
+        newGame(n0, n1, cap); break;
+      }
+      case "bet": c.bets[t] = Math.max(MIN_BET, Math.min(S.teams[t].cash, (c.bets[t] || 0) + +b.dataset.d)); flash = ""; save(); render(); break;
+      case "allin": c.bets[t] = S.teams[t].cash; flash = ""; save(); render(); break;
+      case "card": c.card[t] = c.card[t] === b.dataset.c ? null : b.dataset.c; save(); render(); break;
+      case "sfida": c.sfida = !c.sfida; save(); render(); if (c.sfida) document.getElementById("sfida-name")?.focus(); break;
+      case "show": showQuestion(); break;
+      case "timer": startTimer(); break;
+      case "clue": c.clues++; save(); render(); break;
+      case "ans": stopTimer(); c.ans[TURNO[S.qi]] = +b.dataset.k; resolveSingle(+b.dataset.k === Q[S.qi].corretta); break;
+      case "judge": stopTimer(); resolveSingle(b.dataset.v === "1"); break;
+      case "bothans": c.ans[t] = +b.dataset.k; flash = ""; save(); render(); break;
+      case "both": stopTimer(); resolveBoth(); break;
+      case "ruba": commit(() => { S.cur.ruba = "answering"; }); startTimer(); break;
+      case "noruba": commit(() => { S.cur.reveal = true; S.cur.ruba = "skipped"; }); break;
+      case "rubaans": stopTimer(); resolveRuba(+b.dataset.k === Q[S.qi].corretta); break;
+      case "rubajudge": stopTimer(); resolveRuba(b.dataset.v === "1"); break;
+      case "next": next(); break;
+      case "event": applyEvent(); break;
+      case "evnext": commit(advance); break;
+      case "loan": commit(() => { S.teams[t].cash += LOAN; S.teams[t].debt += LOAN_BACK; }); break;
+      case "adj": commit(() => { S.teams[t].cash += +b.dataset.d; }); break;
+      case "restart": S = null; history = []; try { localStorage.removeItem(KEY); } catch (e) {} render(); break;
+    }
+  });
+
+  document.addEventListener("input", ev => {
+    const el = ev.target, k = el.dataset.in, t = +el.dataset.t;
+    if (!k || !S) return;
+    if (k === "bet") S.cur.bets[t] = parseInt(el.value, 10);
+    if (k === "sfida") S.cur.sfidaName = el.value;
+    if (k === "num") S.cur.nums[t] = el.value;
+    if (k === "bid") S.ev.bids[t] = el.value;
+    save();
+  });
+
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape" && showRules) { showRules = false; render(); } });
+  document.getElementById("rules").addEventListener("click", ev => { if (ev.target.id === "rules") { showRules = false; render(); } });
+
+  load();
+  render();
+})();
+</script>
+</body>
+</html>
